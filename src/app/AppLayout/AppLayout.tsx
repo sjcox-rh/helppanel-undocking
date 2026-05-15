@@ -148,6 +148,7 @@ interface ChromeTab {
   active: boolean;
   onSelect?: () => void;
   onClose?: () => void;
+  hasIndicator?: boolean;
 }
 
 const ChromeBrowserFrame: React.FC<{
@@ -223,6 +224,15 @@ const ChromeBrowserFrame: React.FC<{
           }}>
             {tab.title}
           </span>
+          {tab.hasIndicator && (
+            <span style={{
+              width: '8px',
+              height: '8px',
+              borderRadius: '50%',
+              backgroundColor: '#0066cc',
+              flexShrink: 0,
+            }} />
+          )}
           {tab.onClose && (
             <svg
               width="14" height="14" viewBox="0 0 14 14" fill="none"
@@ -3884,10 +3894,22 @@ const AppLayout: React.FunctionComponent<IAppLayout> = ({ children, helpStandalo
           );
         })()}
       </Tab>
-      <Tab 
-        eventKey={6} 
+      <Tab
+        eventKey={6}
         title={
-          <img src={SparkleIcon} alt="Chat" style={{ width: '14px', height: '14px' }} />
+          <span style={{ position: 'relative', display: 'inline-flex' }}>
+            <img src={SparkleIcon} alt="Chat" style={{ width: '14px', height: '14px' }} />
+            <span style={{
+              position: 'absolute',
+              top: '-4px',
+              right: '-6px',
+              width: '8px',
+              height: '8px',
+              borderRadius: '50%',
+              backgroundColor: '#0066cc',
+              border: '2px solid white',
+            }} />
+          </span>
         }
         aria-label="Chat sub tab"
       >
@@ -4328,7 +4350,7 @@ const AppLayout: React.FunctionComponent<IAppLayout> = ({ children, helpStandalo
         <MastheadBrand data-codemods>
           <MastheadLogo data-codemods onClick={() => navigate('/')} style={{ cursor: 'pointer' }}>
             <img 
-              src="https://upload.wikimedia.org/wikipedia/commons/thumb/d/d8/Red_Hat_logo.svg/2560px-Red_Hat_logo.svg.png"
+              src="https://console.redhat.com/apps/chrome/js/1556a00da48cc0cf.svg"
               alt="Red Hat Logo"
               style={{ height: '40px', width: 'auto' }}
             />
@@ -4797,9 +4819,16 @@ const AppLayout: React.FunctionComponent<IAppLayout> = ({ children, helpStandalo
     </SkipToContent>
   );
 
-  const renderHelpPanelHead = (onCloseHelp: () => void) => (
+  const renderHelpPanelHead = (onCloseHelp: () => void, isDocked = true, onDock?: () => void) => (
     <DrawerHead>
-      <div style={{ display: 'flex', alignItems: 'center', gap: '12px', width: '100%' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '12px', width: '100%', padding: isDocked ? undefined : '12px 16px' }}>
+        {!isDocked && (
+          <img
+            src="https://console.redhat.com/apps/chrome/js/1556a00da48cc0cf.svg"
+            alt="Red Hat Logo"
+            style={{ height: '32px', width: 'auto' }}
+          />
+        )}
         <Title headingLevel="h2" size="lg">
           Help
         </Title>
@@ -4815,26 +4844,40 @@ const AppLayout: React.FunctionComponent<IAppLayout> = ({ children, helpStandalo
           Red Hat status page
           <ExternalLinkAltIcon style={{ marginLeft: '4px' }} />
         </Button>
+        {onDock && (
+          <div style={{ marginLeft: 'auto' }}>
+            <Button
+              variant="secondary"
+              onClick={onDock}
+              icon={<ArrowRightIcon />}
+              iconPosition="end"
+            >
+              Dock to side panel
+            </Button>
+          </div>
+        )}
       </div>
-      <DrawerActions>
-        <Tooltip content="Open help in a new browser tab">
-          <Button
-            variant="plain"
-            onClick={openHelpInNewTab}
-            aria-label="Open help in a new browser tab"
-            icon={<ExternalLinkAltIcon />}
-          />
-        </Tooltip>
-        <Tooltip content="Open help in a separate window">
-          <Button
-            variant="plain"
-            onClick={openHelpUndocked}
-            aria-label="Open help in a separate window"
-            icon={<OutlinedWindowRestoreIcon />}
-          />
-        </Tooltip>
-        <DrawerCloseButton onClick={onCloseHelp} />
-      </DrawerActions>
+      {isDocked && (
+        <DrawerActions>
+          <Tooltip content="Open help in a new browser tab">
+            <Button
+              variant="plain"
+              onClick={openHelpInNewTab}
+              aria-label="Open help in a new browser tab"
+              icon={<ExternalLinkAltIcon />}
+            />
+          </Tooltip>
+          <Tooltip content="Open help in a separate window">
+            <Button
+              variant="plain"
+              onClick={openHelpUndocked}
+              aria-label="Open help in a separate window"
+              icon={<OutlinedWindowRestoreIcon />}
+            />
+          </Tooltip>
+          <DrawerCloseButton onClick={onCloseHelp} />
+        </DrawerActions>
+      )}
     </DrawerHead>
   );
 
@@ -5153,39 +5196,43 @@ const AppLayout: React.FunctionComponent<IAppLayout> = ({ children, helpStandalo
     return (
       <ChromeBrowserFrame title="Help | Red Hat Hybrid Cloud Console" url="console.redhat.com/help">
         <div
-          className="hcp-help-standalone pf-v6-c-drawer__panel"
+          className="hcp-help-standalone"
           style={{
             height: '100%',
             display: 'flex',
             flexDirection: 'column',
             overflow: 'hidden',
-            backgroundColor: 'var(--pf-v6-global--BackgroundColor--100)',
+            backgroundColor: '#f0f0f0',
           }}
         >
           <HelpPanelContext.Provider value={{ openHelpPanelWithTab }}>
-            {renderHelpPanelHead(onStandaloneClose)}
-            <div
-              className="pf-v6-c-drawer__panel-content"
-              style={{
-                flex: 1,
-                minHeight: 0,
-                display: 'flex',
-                flexDirection: 'column',
-                overflow: 'hidden',
-              }}
-            >
-              <DrawerContentBody
-                style={{
-                  padding: 0,
-                  flex: 1,
-                  minHeight: 0,
-                  overflow: 'hidden',
-                  display: 'flex',
-                  flexDirection: 'column',
-                }}
-              >
-                {helpPanelTabsSection}
-              </DrawerContentBody>
+            <div style={{ padding: '24px', display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, overflow: 'hidden' }}>
+              <div style={{ backgroundColor: '#fff', borderRadius: '8px', boxShadow: '0 1px 2px rgba(0,0,0,0.1)', display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, overflow: 'hidden' }}>
+                {renderHelpPanelHead(onStandaloneClose, false)}
+                <div
+                  className="pf-v6-c-drawer__panel-content"
+                  style={{
+                    flex: 1,
+                    minHeight: 0,
+                    display: 'flex',
+                    flexDirection: 'column',
+                    overflow: 'hidden',
+                  }}
+                >
+                  <DrawerContentBody
+                    style={{
+                      padding: 0,
+                      flex: 1,
+                      minHeight: 0,
+                      overflow: 'hidden',
+                      display: 'flex',
+                      flexDirection: 'column',
+                    }}
+                  >
+                    {helpPanelTabsSection}
+                  </DrawerContentBody>
+                </div>
+              </div>
             </div>
           </HelpPanelContext.Provider>
         </div>
@@ -5207,7 +5254,7 @@ const AppLayout: React.FunctionComponent<IAppLayout> = ({ children, helpStandalo
   const chromeTabs: ChromeTab[] = helpInNewTab
     ? [
         { title: 'Red Hat Hybrid Cloud Console', active: activeChromeTab === 'console', onSelect: () => setActiveChromeTab('console') },
-        { title: 'Help', active: activeChromeTab === 'help', onSelect: () => setActiveChromeTab('help'), onClose: () => { setHelpInNewTab(false); setActiveChromeTab('console'); } },
+        { title: 'Help', active: activeChromeTab === 'help', onSelect: () => setActiveChromeTab('help'), onClose: () => { setHelpInNewTab(false); setActiveChromeTab('console'); }, hasIndicator: activeChromeTab === 'console' },
       ]
     : [{ title: 'Red Hat Hybrid Cloud Console', active: true }];
 
@@ -5222,28 +5269,18 @@ const AppLayout: React.FunctionComponent<IAppLayout> = ({ children, helpStandalo
             display: 'flex',
             flexDirection: 'column',
             overflow: 'hidden',
-            backgroundColor: 'var(--pf-v6-global--BackgroundColor--100)',
+            backgroundColor: '#f0f0f0',
           }}
         >
           <HelpPanelContext.Provider value={{ openHelpPanelWithTab }}>
-            {renderHelpPanelHead(() => { setHelpInNewTab(false); setActiveChromeTab('console'); })}
-            <div style={{ display: 'flex', justifyContent: 'flex-end', padding: '8px 16px 0 16px' }}>
-              <Button
-                variant="secondary"
-                onClick={() => {
-                  setHelpInNewTab(false);
-                  setActiveChromeTab('console');
-                  setIsDrawerExpanded(true);
-                }}
-                icon={<ArrowRightIcon />}
-                iconPosition="end"
-              >
-                Dock to side panel
-              </Button>
+            <div style={{ padding: '24px', display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, overflow: 'hidden' }}>
+              <div style={{ backgroundColor: '#fff', borderRadius: '8px', boxShadow: '0 1px 2px rgba(0,0,0,0.1)', display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, overflow: 'hidden' }}>
+                {renderHelpPanelHead(() => { setHelpInNewTab(false); setActiveChromeTab('console'); }, false, () => { setHelpInNewTab(false); setActiveChromeTab('console'); setIsDrawerExpanded(true); })}
+                <DrawerContentBody style={{ padding: 0, flex: 1, minHeight: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+                  {helpPanelTabsSection}
+                </DrawerContentBody>
+              </div>
             </div>
-            <DrawerContentBody style={{ padding: 0, flex: 1, minHeight: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-              {helpPanelTabsSection}
-            </DrawerContentBody>
           </HelpPanelContext.Provider>
         </div>
       ) : (
