@@ -1,11 +1,14 @@
 import * as React from 'react';
-import { NavLink, useLocation, useNavigate } from 'react-router-dom';
+import { NavLink, useHref, useLocation, useNavigate } from 'react-router-dom';
 import { IAppRoute, IAppRouteGroup, routes } from '@app/routes';
 import SparkleIcon from '@app/bgimages/sparkle-icon.svg';
 import CommentIcon from '@app/bgimages/comment-icon.svg';
 import FeedbackIcon from '@app/bgimages/feedback-icon.svg';
 import BugIcon from '@app/bgimages/bug-icon.svg';
 import DirectionIcon from '@app/bgimages/direction-icon.svg';
+import SupportCasesListIcon from '@app/bgimages/support-cases-list-icon.svg';
+import SupportContactIcon from '@app/bgimages/support-contact-icon.svg';
+import SupportNewCaseIcon from '@app/bgimages/support-new-case-icon.svg';
 import {
   Avatar,
   Badge,
@@ -103,15 +106,12 @@ import {
   ExclamationTriangleIcon,
   ExternalLinkAltIcon,
   EyeIcon,
-  HelpIcon,
-  InProgressIcon,
   InfoCircleIcon,
   LightbulbIcon,
   ListIcon,
   OutlinedWindowRestoreIcon,
   PlayIcon,
   ProjectDiagramIcon,
-  QuestionCircleIcon,
   RocketIcon,
   SearchIcon,
   ServerIcon,
@@ -126,7 +126,9 @@ import {
 } from '@patternfly/react-icons';
 
 interface IAppLayout {
-  children: React.ReactNode;
+  children?: React.ReactNode;
+  /** Full-page help at `/help` (new tab or undocked window); no main console chrome. */
+  helpStandalone?: boolean;
 }
 
 interface TabContent {
@@ -138,6 +140,32 @@ interface TabContent {
   closable?: boolean;
   hasUserInteracted?: boolean;
   searchQuery?: string;
+}
+
+/** Initial help drawer tabs: Find help. */
+function createDefaultHelpPanelTabs(): TabContent[] {
+  return [
+    { id: 'get-started', title: 'Find help', originalTitle: 'Find help', type: 'overview', activeSubTab: 0, closable: false, hasUserInteracted: false },
+  ];
+}
+
+function isOnlyDefaultHelpPanelTabs(tabList: TabContent[]): boolean {
+  if (tabList.length !== 1) {
+    return false;
+  }
+  return tabList[0].id === 'get-started';
+}
+
+/** Matches visible-tab close rules (Find help only when 2+ tabs). */
+function isHelpPanelTabClosable(tabList: TabContent[], tabIndex: number): boolean {
+  const tab = tabList[tabIndex];
+  if (!tab) {
+    return false;
+  }
+  if (tab.id === 'get-started') {
+    return tabList.length > 1;
+  }
+  return true;
 }
 
 interface MenuItem {
@@ -158,6 +186,11 @@ interface HelpPanelContextType {
 
 export const HelpPanelContext = React.createContext<HelpPanelContextType | undefined>(undefined);
 
+/** Red Hat Customer Portal — support actions open in a new tab (transactional work stays external). */
+const RH_CUSTOMER_SUPPORT_HOME = 'https://access.redhat.com/support';
+const RH_SUPPORT_CASES_LIST = 'https://access.redhat.com/support/cases/';
+const RH_SUPPORT_NEW_CASE = 'https://access.redhat.com/support/cases/#/case/new/get-support?';
+
 // Helper function to get icon based on breadcrumb text
   const getBreadcrumbIcon = (breadcrumbText: string) => {
     const iconStyle = { width: '12px', height: '12px', marginRight: '4px', verticalAlign: 'middle' };
@@ -170,8 +203,6 @@ export const HelpPanelContext = React.createContext<HelpPanelContextType | undef
         return <LightbulbIcon style={iconStyle} />;
       case 'API documentation':
         return <ProjectDiagramIcon style={iconStyle} />;
-      case 'My open support tickets':
-        return <QuestionCircleIcon style={iconStyle} />;
       case 'Share feedback':
         return <CommentsIcon style={iconStyle} />;
       default:
@@ -179,9 +210,10 @@ export const HelpPanelContext = React.createContext<HelpPanelContextType | undef
     }
   };
 
-const AppLayout: React.FunctionComponent<IAppLayout> = ({ children }) => {
+const AppLayout: React.FunctionComponent<IAppLayout> = ({ children, helpStandalone = false }) => {
   const [sidebarOpen, setSidebarOpen] = React.useState(true);
   const [isDrawerExpanded, setIsDrawerExpanded] = React.useState(false);
+  const helpPanelOpen = helpStandalone || isDrawerExpanded;
   const [activeTabKey, setActiveTabKey] = React.useState<string | number>('get-started');
   const [tabCounter, setTabCounter] = React.useState(3);
   
@@ -192,7 +224,8 @@ const AppLayout: React.FunctionComponent<IAppLayout> = ({ children }) => {
     'Knowledgebase',
     'APIs',
     'Support',
-    'Ask Red Hat'
+    'Ask Red Hat',
+    'Chat'
   ];
 
   // Complete APIs tab data - all content (43 APIs from Red Hat API Catalog)
@@ -336,10 +369,7 @@ const AppLayout: React.FunctionComponent<IAppLayout> = ({ children }) => {
     { id: 'learn-51', title: 'Configuring console event notifications in Slack', breadcrumb1: 'Learning resources', breadcrumb2: 'Quick start', labels: ['Settings'] }
   ];
 
-  const [tabs, setTabs] = React.useState<TabContent[]>([
-    { id: 'comments', title: '', originalTitle: '', type: 'custom', activeSubTab: 0, closable: false, hasUserInteracted: false },
-    { id: 'get-started', title: 'Find help', originalTitle: 'Find help', type: 'overview', activeSubTab: 0, closable: false, hasUserInteracted: false }
-  ]);
+  const [tabs, setTabs] = React.useState<TabContent[]>(() => createDefaultHelpPanelTabs());
   
   // Create a ref to always have access to the current tabs state (for closures)
   const tabsRef = React.useRef(tabs);
@@ -355,7 +385,7 @@ const AppLayout: React.FunctionComponent<IAppLayout> = ({ children }) => {
   // Update tab tooltips when tabs change
   React.useEffect(() => {
     const tooltipsToShow = tabs
-      .filter(tab => tab.id !== 'comments' && tab.title.length > 20)
+      .filter(tab => tab.title.length > 20)
       .map(tab => ({ tabId: tab.id, text: tab.title }));
     setTabTooltips(tooltipsToShow);
   }, [tabs]);
@@ -390,8 +420,8 @@ const AppLayout: React.FunctionComponent<IAppLayout> = ({ children }) => {
   
   // Update overflow button text
   React.useEffect(() => {
-    // Only run if drawer is open
-    if (!isDrawerExpanded) {
+    // Only run if help panel is visible (inline drawer or standalone /help)
+    if (!helpPanelOpen) {
       return;
     }
     
@@ -707,7 +737,7 @@ const AppLayout: React.FunctionComponent<IAppLayout> = ({ children }) => {
         }
         
         // Check if close button already exists or if tab is not closable
-        if (menuItem.querySelector('.tab-close-button') || tabIndex === -1 || !currentTabs[tabIndex].closable) {
+        if (menuItem.querySelector('.tab-close-button') || tabIndex === -1 || !isHelpPanelTabClosable(currentTabs, tabIndex)) {
           return;
         }
         
@@ -773,17 +803,11 @@ const AppLayout: React.FunctionComponent<IAppLayout> = ({ children }) => {
         menuItem.appendChild(closeButton);
       });
       
-      // Add "Close all" button at the bottom if we have overflow items
-      const closableItems = Array.from(menuItems).filter((item) => {
-        const itemText = item.textContent?.trim() || '';
-        // Remove the × symbol from the text when matching
-        const cleanText = itemText.replace(/\s*×\s*$/, '').trim();
-        const currentTabs = tabsRef.current;
-        const tabIndex = currentTabs.findIndex(tab => tab.title === cleanText);
-        return tabIndex !== -1 && currentTabs[tabIndex].closable;
-      });
-      
-      if (closableItems.length > 0) {
+      // "Close all tabs" when the drawer is not already in default two-tab state
+      const currentTabsForCloseAll = tabsRef.current;
+      const showCloseAllTabs = !isOnlyDefaultHelpPanelTabs(currentTabsForCloseAll);
+
+      if (showCloseAllTabs) {
         // Remove existing close all button and divider if they exist
         const existingButton = overflowMenu.querySelector('.close-all-tabs-button');
         const existingDivider = overflowMenu.querySelector('.close-all-divider');
@@ -822,64 +846,18 @@ const AppLayout: React.FunctionComponent<IAppLayout> = ({ children }) => {
             align-items: center;
             justify-content: flex-start;
           `;
-          closeAllButton.textContent = `Close all (${closableItems.length}) hidden tabs`;
+          closeAllButton.textContent = 'Close all tabs';
           
-          // Handle close all click
+          // Handle close all click — reset to default help tabs (Find help)
           closeAllButton.addEventListener('click', (e) => {
             e.stopPropagation();
             e.preventDefault();
-            
-            // Get the current tabs state - critical for avoiding stale closure
-            const currentTabs = tabsRef.current;
-            
-            // Re-query the menu items to get fresh DOM state
-            const freshOverflowMenu = document.querySelector('.pf-v6-c-tabs [role="menu"]');
-            if (!freshOverflowMenu) {
-              return;
-            }
-            
-            const freshMenuItems = freshOverflowMenu.querySelectorAll('button[role="menuitem"]:not(.close-all-tabs-button)');
-            
-            // The overflow menu contains tabs in the order they appear in the tabs array
-            // We need to figure out which tabs are in overflow by counting how many are visible
-            // Visible tabs = total tabs - overflow menu items
-            const visibleTabCount = currentTabs.length - freshMenuItems.length;
-            
-            // Collect all tab IDs to close
-            const tabIdsToClose: string[] = [];
-            
-            freshMenuItems.forEach((item, menuIndex) => {
-              // Map menu item index to tab index
-              // Menu items correspond to tabs starting from visibleTabCount
-              const tabIndex = visibleTabCount + menuIndex;
-              
-              if (tabIndex < currentTabs.length) {
-                const tab = currentTabs[tabIndex];
-                if (tab.closable) {
-                  tabIdsToClose.push(tab.id);
-                }
-              }
-            });
-            
-            if (tabIdsToClose.length === 0) {
-              return;
-            }
-            
-            // Close all tabs at once by filtering them out
-            const newTabs = currentTabs.filter(tab => !tabIdsToClose.includes(tab.id));
-            setTabs(newTabs);
-            
-            // If active tab was closed, switch to another tab
-            if (tabIdsToClose.includes(activeTabKey as string)) {
-              const getStartedTab = newTabs.find(t => t.id === 'get-started');
-              if (getStartedTab) {
-                setActiveTabKey('get-started');
-              } else if (newTabs.length > 0) {
-                setActiveTabKey(newTabs[0].id);
-              }
-            }
-            
-            // Close the menu
+
+            setTabs(createDefaultHelpPanelTabs());
+            setActiveTabKey('get-started');
+            setSearchQuery('');
+            setFeedbackView('main');
+
             const overflowButton = document.querySelector('.pf-v6-c-tabs button[aria-haspopup="menu"]') as HTMLElement;
             if (overflowButton) {
               overflowButton.click();
@@ -969,11 +947,11 @@ const AppLayout: React.FunctionComponent<IAppLayout> = ({ children }) => {
       window.removeEventListener('resize', handleResize);
       document.removeEventListener('click', handleClick);
     };
-  }, [tabs, isDrawerExpanded, activeTabKey]);
+  }, [tabs, helpPanelOpen, activeTabKey]);
   
   // Ensure active tab is always visible when activeTabKey changes
   React.useEffect(() => {
-    if (isDrawerExpanded) {
+    if (helpPanelOpen) {
       const tabIndex = tabs.findIndex(t => t.id === activeTabKey);
       if (tabIndex !== -1) {
         setTimeout(() => {
@@ -981,7 +959,7 @@ const AppLayout: React.FunctionComponent<IAppLayout> = ({ children }) => {
         }, 150);
       }
     }
-  }, [activeTabKey, isDrawerExpanded, tabs]);
+  }, [activeTabKey, helpPanelOpen, tabs]);
   
   // Feedback tab state
   const [feedbackView, setFeedbackView] = React.useState<'main' | 'general' | 'bug' | 'direction'>('main');
@@ -1173,24 +1151,6 @@ const AppLayout: React.FunctionComponent<IAppLayout> = ({ children }) => {
   // Bookmarked menu items state
   const [bookmarkedItems, setBookmarkedItems] = React.useState<Set<string>>(new Set());
   
-  // Support tickets state
-  const [supportTickets, setSupportTickets] = React.useState<Array<{id: string, title: string, status: 'waiting-red-hat' | 'waiting-customer'}>>([]);
-  const [supportTicketsLoading, setSupportTicketsLoading] = React.useState(false);
-  
-  // Sample support case titles
-  const sampleSupportCases = [
-    "Critical production outage - Database connection timeout",
-    "Performance degradation in API response times",
-    "SSL certificate expiration warning",
-    "Unable to access admin console after recent update",
-    "Cluster nodes failing health checks",
-    "Memory leak in application container",
-    "Network connectivity issues between nodes",
-    "Authentication service intermittent failures",
-    "Data replication lag in database cluster",
-    "Load balancer configuration assistance needed"
-  ];
-  
   // Function to toggle bookmark status of a menu item
   const toggleBookmark = (itemId: string) => {
     setBookmarkedItems(prev => {
@@ -1202,30 +1162,6 @@ const AppLayout: React.FunctionComponent<IAppLayout> = ({ children }) => {
       }
       return newSet;
     });
-  };
-  
-  // Function to load support tickets from Customer Portal
-  const loadSupportTickets = () => {
-    setSupportTicketsLoading(true);
-    // Simulate API call with a delay
-    setTimeout(() => {
-      setSupportTicketsLoading(false);
-      
-      // Get a random title from the sample cases
-      const randomTitle = sampleSupportCases[Math.floor(Math.random() * sampleSupportCases.length)];
-      // Randomly assign a status
-      const randomStatus: 'waiting-red-hat' | 'waiting-customer' = Math.random() > 0.5 ? 'waiting-red-hat' : 'waiting-customer';
-      
-      // Add a new ticket to the beginning of the array (most recent on top)
-      setSupportTickets(prevTickets => [
-        {
-          id: `support-case-${Date.now()}`,
-          title: randomTitle,
-          status: randomStatus
-        },
-        ...prevTickets
-      ]);
-    }, 1500); // 1.5 second delay
   };
   
   // Learn tab filter states
@@ -1343,26 +1279,12 @@ const AppLayout: React.FunctionComponent<IAppLayout> = ({ children }) => {
       }
     });
     
-    // Support items (dynamic)
-    supportTickets.forEach(item => {
-      if (!resultsMap.has(item.title)) {
-        resultsMap.set(item.title, {
-          id: item.id,
-          title: item.title,
-          breadcrumb1: 'My open support tickets',
-          breadcrumb2: '',
-          labels: [],
-          tab: 'Support'
-        });
-      }
-    });
-    
     // Convert Map values back to array
     return Array.from(resultsMap.values());
   };
 
   /**
-   * Enhanced search function that searches across all tabs (Learn, Knowledgebase, APIs, Support)
+   * Enhanced search function that searches across all tabs (Learn, Knowledgebase, APIs)
    * Searches in: title, breadcrumbs (breadcrumb1, breadcrumb2), labels, and tab names
    * Also applies content type filters if any are selected
    */
@@ -1423,11 +1345,6 @@ const AppLayout: React.FunctionComponent<IAppLayout> = ({ children }) => {
         
         // API documentation filter
         if (selectedSearchContentTypes.has('api-documentation') && item.breadcrumb1 === 'API documentation') {
-          return true;
-        }
-        
-        // Support cases filter
-        if (selectedSearchContentTypes.has('support-cases') && item.breadcrumb1 === 'My open support tickets') {
           return true;
         }
         
@@ -1513,8 +1430,7 @@ const AppLayout: React.FunctionComponent<IAppLayout> = ({ children }) => {
       'learning-paths': 'Learning paths',
       'other': 'Other',
       'knowledgebase': 'Knowledgebase articles',
-      'api-documentation': 'API documentation',
-      'support-cases': 'My open support cases'
+      'api-documentation': 'API documentation'
     };
     return displayNames[contentType] || contentType;
   };
@@ -1532,7 +1448,24 @@ const AppLayout: React.FunctionComponent<IAppLayout> = ({ children }) => {
   // Location and navigation
   const location = useLocation();
   const navigate = useNavigate();
-  
+  const helpStandaloneHref = useHref('/help');
+  const getHelpAbsoluteUrl = React.useCallback(
+    () => `${window.location.origin}${helpStandaloneHref}`,
+    [helpStandaloneHref]
+  );
+  const openHelpInNewTab = React.useCallback(() => {
+    window.open(getHelpAbsoluteUrl(), '_blank', 'noopener,noreferrer');
+  }, [getHelpAbsoluteUrl]);
+  const HELP_UNDOCK_WINDOW_NAME = 'hccHelpPanel';
+  const openHelpUndocked = React.useCallback(() => {
+    const w = 720;
+    const h = Math.min(Math.round(window.screen.availHeight * 0.85), 900);
+    const left = Math.max(0, Math.round((window.screen.availWidth - w) / 2));
+    const top = Math.max(0, Math.round((window.screen.availHeight - h) / 2));
+    const features = [`width=${w}`, `height=${h}`, `left=${left}`, `top=${top}`, 'resizable=yes', 'scrollbars=yes'].join(',');
+    window.open(getHelpAbsoluteUrl(), HELP_UNDOCK_WINDOW_NAME, features);
+  }, [getHelpAbsoluteUrl]);
+
   // Function to get current bundle name based on route
   const getCurrentBundle = () => {
     const currentPath = location.pathname;
@@ -1658,7 +1591,7 @@ const AppLayout: React.FunctionComponent<IAppLayout> = ({ children }) => {
 
   // ResizeObserver to track help panel width changes
   React.useEffect(() => {
-    if (!isDrawerExpanded) {
+    if (!helpPanelOpen) {
       return;
     }
 
@@ -1710,7 +1643,18 @@ const AppLayout: React.FunctionComponent<IAppLayout> = ({ children }) => {
         delete (window as any).helpPanelResizeObserver;
       }
     };
-  }, [isDrawerExpanded]);
+  }, [helpPanelOpen]);
+
+  React.useEffect(() => {
+    if (!helpStandalone) {
+      return;
+    }
+    const previousTitle = document.title;
+    document.title = 'Help | Red Hat Hybrid Cloud Console';
+    return () => {
+      document.title = previousTitle;
+    };
+  }, [helpStandalone]);
 
   // Debug effect to log selectedMenuItem changes
   React.useEffect(() => {
@@ -1761,35 +1705,36 @@ const AppLayout: React.FunctionComponent<IAppLayout> = ({ children }) => {
     tabIndexOrId: string | number
   ) => {
     event.stopPropagation();
-    
-    // Convert numeric index to tab ID if needed (for backward compatibility)
+
+    const currentTabs = tabsRef.current;
     let tabId: string;
     if (typeof tabIndexOrId === 'number') {
-      tabId = tabs[tabIndexOrId]?.id || '';
+      tabId = currentTabs[tabIndexOrId]?.id || '';
     } else {
       tabId = tabIndexOrId;
     }
-    
-    // Find the tab to close
-    const tabToClose = tabs.find(t => t.id === tabId);
-    if (!tabToClose || tabToClose.closable === false) {
+
+    const tabIndex = currentTabs.findIndex((t) => t.id === tabId);
+    if (tabIndex === -1 || !isHelpPanelTabClosable(currentTabs, tabIndex)) {
       return;
     }
-    
-    // Remove the tab
-    const newTabs = tabs.filter(t => t.id !== tabId);
+
+    const newTabs = currentTabs.filter((t) => t.id !== tabId);
     setTabs(newTabs);
-    
-    // If we're closing the active tab, switch to another tab
-    if (activeTabKey === tabId) {
-      // Switch to 'get-started' tab if it exists, otherwise the first tab
-      const getStartedTab = newTabs.find(t => t.id === 'get-started');
-      if (getStartedTab) {
-        setActiveTabKey('get-started');
-      } else if (newTabs.length > 0) {
-        setActiveTabKey(newTabs[0].id);
+
+    setActiveTabKey((prev) => {
+      if (prev !== tabId) {
+        return prev;
       }
-    }
+      const getStartedTab = newTabs.find((t) => t.id === 'get-started');
+      if (getStartedTab) {
+        return 'get-started';
+      }
+      if (newTabs.length > 0) {
+        return newTabs[0].id;
+      }
+      return prev;
+    });
   };
 
   const handleSubTabClick = (tabIndex: number, subTabIndex: number) => {
@@ -1805,7 +1750,7 @@ const AppLayout: React.FunctionComponent<IAppLayout> = ({ children }) => {
     
     // Always update title with sub-tab name when switching sub-tabs
     if (newTabs[tabIndex].type === 'overview' || newTabs[tabIndex].type === 'custom') {
-      // Use "Feedback" for subTabIndex 5 instead of "Ask Red Hat"
+      // Use "Feedback" for subTabIndex 5 instead of "Ask Red Hat", use "Chat" for subTabIndex 6
       const newTitle = subTabIndex === 5 ? 'Feedback' : subTabNames[subTabIndex];
       newTabs[tabIndex].title = newTitle;
       newTabs[tabIndex].originalTitle = newTitle;
@@ -1852,6 +1797,18 @@ const AppLayout: React.FunctionComponent<IAppLayout> = ({ children }) => {
 
   const onDrawerClose = () => {
     setIsDrawerExpanded(false);
+  };
+
+  const onStandaloneClose = () => {
+    if (window.opener && !window.opener.closed) {
+      window.close();
+      return;
+    }
+    if (window.history.length > 1) {
+      navigate(-1);
+      return;
+    }
+    navigate('/');
   };
 
   const onNotificationDrawerToggle = () => {
@@ -1930,8 +1887,8 @@ const AppLayout: React.FunctionComponent<IAppLayout> = ({ children }) => {
       });
     }
     
-    // Open the drawer if it's not already open
-    if (!isDrawerExpanded) {
+    // Open the drawer if it's not already open (skip when already on full-page help)
+    if (!helpStandalone && !isDrawerExpanded) {
       setIsDrawerExpanded(true);
     }
     
@@ -2057,7 +2014,6 @@ const AppLayout: React.FunctionComponent<IAppLayout> = ({ children }) => {
     
     return (
     <Tabs
-      isSubtab
       activeKey={tab.activeSubTab || 0}
       onSelect={(event, subTabIndex) => handleSubTabClick(tabIndex, subTabIndex as number)}
       aria-label={ariaLabel}
@@ -2153,7 +2109,8 @@ const AppLayout: React.FunctionComponent<IAppLayout> = ({ children }) => {
           }
           /* Re-enable pointer events for specific clickable elements */
           .learn-menu .pf-v6-c-menu__item button,
-          .learn-menu .pf-v6-c-menu__item .menu-item-title {
+          .learn-menu .pf-v6-c-menu__item .menu-item-title,
+          .learn-menu .pf-v6-c-menu__item a.menu-item-title {
             pointer-events: auto !important;
           }
           /* Bookmark icon colors */
@@ -2313,14 +2270,6 @@ const AppLayout: React.FunctionComponent<IAppLayout> = ({ children }) => {
                         onChange={() => toggleSearchContentType('api-documentation')}
                       />
                     </MenuItem>
-                    <MenuItem itemId="support-cases">
-                      <Checkbox
-                        id="search-content-type-support-cases"
-                        label="My open support cases"
-                        isChecked={selectedSearchContentTypes.has('support-cases')}
-                        onChange={() => toggleSearchContentType('support-cases')}
-                      />
-                    </MenuItem>
                   </MenuList>
                 </Menu>
               </Dropdown>
@@ -2328,7 +2277,7 @@ const AppLayout: React.FunctionComponent<IAppLayout> = ({ children }) => {
           </div>
           {!searchQuery.trim() && (
             <div style={{ padding: '0 16px 16px 16px', fontSize: '14px', lineHeight: '1.5', color: 'var(--pf-v6-global--Color--200)' }}>
-              Find documentation, quick starts, API documentation, knowledgebase articles, and open support tickets.
+              Find documentation, quick starts, API documentation, and knowledgebase articles.
             </div>
           )}
           
@@ -2720,7 +2669,8 @@ const AppLayout: React.FunctionComponent<IAppLayout> = ({ children }) => {
           }
           /* Re-enable pointer events for specific clickable elements */
           .learn-menu .pf-v6-c-menu__item button,
-          .learn-menu .pf-v6-c-menu__item .menu-item-title {
+          .learn-menu .pf-v6-c-menu__item .menu-item-title,
+          .learn-menu .pf-v6-c-menu__item a.menu-item-title {
             pointer-events: auto !important;
           }
           /* Bookmark icon colors */
@@ -3054,7 +3004,8 @@ const AppLayout: React.FunctionComponent<IAppLayout> = ({ children }) => {
           }
           /* Re-enable pointer events for specific clickable elements */
           .learn-menu .pf-v6-c-menu__item button,
-          .learn-menu .pf-v6-c-menu__item .menu-item-title {
+          .learn-menu .pf-v6-c-menu__item .menu-item-title,
+          .learn-menu .pf-v6-c-menu__item a.menu-item-title {
             pointer-events: auto !important;
           }
           /* Bookmark icon colors */
@@ -3291,7 +3242,8 @@ const AppLayout: React.FunctionComponent<IAppLayout> = ({ children }) => {
           }
           /* Re-enable pointer events for specific clickable elements */
           .learn-menu .pf-v6-c-menu__item button,
-          .learn-menu .pf-v6-c-menu__item .menu-item-title {
+          .learn-menu .pf-v6-c-menu__item .menu-item-title,
+          .learn-menu .pf-v6-c-menu__item a.menu-item-title {
             pointer-events: auto !important;
           }
           /* Bookmark icon colors */
@@ -3460,182 +3412,117 @@ const AppLayout: React.FunctionComponent<IAppLayout> = ({ children }) => {
         title={<TabTitleText>Support</TabTitleText>}
         aria-label="Support sub tab"
       >
-        <style>{`
-          .learn-menu .pf-v6-c-menu {
-            box-shadow: none !important;
-            border: none !important;
-            width: 100% !important;
-          }
-          .learn-menu .pf-v6-c-menu__list {
-            padding: 0 !important;
-          }
-          .learn-menu .pf-v6-c-menu__list-item {
-            width: 100% !important;
-          }
-          .learn-menu .pf-v6-c-menu__item-main {
-            display: flex !important;
-            align-items: flex-start !important;
-            gap: 12px !important;
-            padding-right: 0 !important;
-          }
-          .learn-menu .pf-v6-c-menu__item-text {
-            padding-right: 0 !important;
-          }
-          .learn-menu .menu-item-content {
-            display: flex;
-            flex-direction: column;
-            flex: 1;
-            gap: 4px;
-            min-width: 0;
-            width: 100%;
-          }
-          .learn-menu .menu-item-title-row {
-            display: flex;
-            align-items: center;
-            gap: 4px;
-            min-width: 0;
-          }
-          .learn-menu .menu-item-title-row button {
-            padding: 4px !important;
-          }
-          .learn-menu .menu-item-breadcrumb-row {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 16px;
-          }
-          .learn-menu .menu-item-title {
-            color: var(--pf-v6-global--link--Color, #0066cc);
-            cursor: pointer;
-            text-decoration: none;
-            flex: 1;
-            min-width: 0;
-            word-wrap: break-word;
-            word-break: break-word;
-          }
-          .learn-menu .menu-item-title:hover {
-            color: var(--pf-v6-global--link--Color--hover, #004080);
-            text-decoration: underline;
-          }
-          .learn-menu .menu-item-label {
-            pointer-events: none;
-          }
-          /* Remove hover background on menu items - multiple selectors for specificity */
-          .learn-menu .pf-v6-c-menu__list-item:hover,
-          .learn-menu .pf-v6-c-menu__list-item:hover .pf-v6-c-menu__item,
-          .learn-menu .pf-v6-c-menu__item:hover,
-          .learn-menu .pf-v6-c-menu__item-main:hover,
-          .learn-menu .pf-v6-c-menu__list-item:hover .pf-v6-c-menu__item-main {
-            background-color: transparent !important;
-          }
-          /* Override PatternFly CSS variables for hover */
-          .learn-menu .pf-v6-c-menu__list-item {
-            --pf-v6-c-menu__list-item--hover--BackgroundColor: transparent !important;
-          }
-          .learn-menu .pf-v6-c-menu__item {
-            --pf-v6-c-menu__item--hover--BackgroundColor: transparent !important;
-          }
-          /* Make the menu item itself non-clickable */
-          .learn-menu .pf-v6-c-menu__item {
-            pointer-events: none !important;
-          }
-          /* Re-enable pointer events for specific clickable elements */
-          .learn-menu .pf-v6-c-menu__item button,
-          .learn-menu .pf-v6-c-menu__item .menu-item-title {
-            pointer-events: auto !important;
-          }
-          /* Bookmark icon colors */
-          .learn-menu .bookmark-icon {
-            color: var(--pf-t--global--icon--color--disabled, #6a6e73);
-            transition: color 0.2s ease;
-          }
-          .learn-menu .bookmark-icon.bookmarked {
-            color: var(--pf-t--global--color--brand--default, #0066cc);
-          }
-          /* Hide pagination options menu toggle */
-          .learn-menu .pf-v6-c-pagination .pf-v6-c-menu-toggle.pf-m-plain.pf-m-text {
-            display: none !important;
-          }
-          /* Ensure menu items can wrap */
-          .learn-menu .pf-v6-c-menu__item {
-            width: 100% !important;
-            max-width: 100% !important;
-          }
-          .learn-menu .pf-v6-c-menu__item-text {
-            width: 100% !important;
-            max-width: 100% !important;
-          }
-        `}</style>
-        <div className="learn-menu">
-          <div style={{ padding: '16px 16px 12px 16px', fontSize: '14px', lineHeight: '1.5', color: 'var(--pf-v6-global--Color--200)' }}>
-            Quickly see the status on all of your open support cases. To manage support case or open a new one, visit the{' '}
-            <a 
-              href="#" 
-              onClick={(e) => {
-                e.preventDefault();
-                loadSupportTickets();
-              }}
-              style={{ color: 'var(--pf-v6-global--link--Color, #0066cc)', textDecoration: 'none', cursor: 'pointer' }} 
-              onMouseEnter={(e) => e.currentTarget.style.textDecoration = 'underline'} 
-              onMouseLeave={(e) => e.currentTarget.style.textDecoration = 'none'}
-            >
-              Customer Portal
-            </a>.
+        <div className="hcp-support-tab" style={{ padding: '16px 16px 24px 16px' }}>
+          <style>{`
+            .hcp-support-tab .hcp-support-card {
+              cursor: default !important;
+            }
+            .hcp-support-tab .hcp-support-card:hover {
+              border-color: #0066cc !important;
+              border-width: 1px !important;
+              border-style: solid !important;
+            }
+            .hcp-support-tab .hcp-support-card.pf-v6-c-card:hover {
+              --pf-v6-c-card--BorderColor: #0066cc !important;
+              --pf-v6-c-card--BorderWidth: 1px !important;
+            }
+          `}</style>
+          <div style={{ fontSize: '14px', lineHeight: '1.5', color: 'var(--pf-v6-global--Color--200)', marginBottom: '24px' }}>
+            Get help, open a case, or view your cases in the Red Hat Customer Portal. The links below open in a new browser tab.
           </div>
-          
-          {supportTicketsLoading ? (
-            <div style={{ padding: '64px 16px', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
-              <Spinner size="xl" aria-label="Loading support tickets" />
-            </div>
-          ) : supportTickets.length > 0 ? (
-            <>
-              <div style={{ padding: '16px 16px 8px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <span style={{ fontSize: 'var(--pf-t--global--font--size--body--lg, 18px)', fontWeight: '400' }}>My open support cases ({supportTickets.length})</span>
-              </div>
-              <Menu>
-                <MenuList>
-                  {supportTickets.map((ticket, idx) => (
-                    <React.Fragment key={ticket.id}>
-                      {idx > 0 && <Divider component="li" />}
-                      <MenuItem itemId={ticket.id}>
-                        <div className="menu-item-content">
-                          <div className="menu-item-title-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flex: 1, minWidth: 0 }}>
-                              <span className="menu-item-title" style={{ display: 'inline' }}>
-                                {ticket.title}
-                                <ExternalLinkAltIcon style={{ width: '12px', height: '12px', verticalAlign: 'middle', marginLeft: '6px', color: 'var(--pf-v6-global--link--Color, #0066cc)' }} />
-                              </span>
-                            </div>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', whiteSpace: 'nowrap', marginLeft: '16px' }}>
-                              {ticket.status === 'waiting-red-hat' ? (
-                                <>
-                                  <span style={{ fontSize: '14px', color: 'var(--pf-v6-global--Color--200)' }}>Waiting on Red Hat</span>
-                                  <InProgressIcon style={{ width: '14px', height: '14px', color: '#151515' }} />
-                                </>
-                              ) : (
-                                <>
-                                  <span style={{ fontSize: '14px', color: 'var(--pf-v6-global--Color--200)' }}>Waiting on customer</span>
-                                  <BellIcon style={{ width: '14px', height: '14px', color: '#6753AC' }} />
-                                </>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                      </MenuItem>
-                    </React.Fragment>
-                  ))}
-                </MenuList>
-              </Menu>
-            </>
-          ) : (
-            <div style={{ padding: '64px 16px' }}>
-              <EmptyState>
-                <Title headingLevel="h4" size="lg">
-                  No open support tickets filed by you.
-                </Title>
-              </EmptyState>
-            </div>
-          )}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', maxWidth: '800px' }}>
+            <Card className="hcp-support-card" variant="secondary">
+              <CardHeader style={{ paddingBottom: '8px' }}>
+                <img
+                  src={SupportContactIcon}
+                  alt="Contact support"
+                  style={{
+                    height: '48px',
+                    width: 'auto',
+                    display: 'block',
+                  }}
+                />
+              </CardHeader>
+              <CardTitle style={{ paddingTop: 0 }}>Contact support</CardTitle>
+              <CardBody>
+                <div style={{ fontSize: '14px', lineHeight: '1.5', color: 'var(--pf-v6-global--Color--200)', marginBottom: '12px' }}>
+                  Get product documentation, subscription help, and ways to reach Red Hat Support.
+                </div>
+                <Button
+                  variant="link"
+                  isInline
+                  icon={<ExternalLinkAltIcon />}
+                  iconPosition="end"
+                  component="a"
+                  href={RH_CUSTOMER_SUPPORT_HOME}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  Red Hat Customer Support
+                </Button>
+              </CardBody>
+            </Card>
+            <Card className="hcp-support-card" variant="secondary">
+              <CardHeader style={{ paddingBottom: '8px' }}>
+                <img
+                  src={SupportNewCaseIcon}
+                  alt="Start a new support case"
+                  style={{
+                    height: '48px',
+                    width: 'auto',
+                    display: 'block',
+                  }}
+                />
+              </CardHeader>
+              <CardTitle style={{ paddingTop: 0 }}>Start a new support case</CardTitle>
+              <CardBody>
+                <div style={{ fontSize: '14px', lineHeight: '1.5', color: 'var(--pf-v6-global--Color--200)', marginBottom: '12px' }}>
+                  Open a case for production issues, severity guidance, and subscription-backed support.
+                </div>
+                <Button
+                  variant="primary"
+                  icon={<ExternalLinkAltIcon />}
+                  iconPosition="end"
+                  component="a"
+                  href={RH_SUPPORT_NEW_CASE}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  Open a Support Case
+                </Button>
+              </CardBody>
+            </Card>
+            <Card className="hcp-support-card" variant="secondary">
+              <CardHeader style={{ paddingBottom: '8px' }}>
+                <img
+                  src={SupportCasesListIcon}
+                  alt="View your support cases"
+                  style={{
+                    height: '48px',
+                    width: 'auto',
+                    display: 'block',
+                  }}
+                />
+              </CardHeader>
+              <CardTitle style={{ paddingTop: 0 }}>View your support cases</CardTitle>
+              <CardBody>
+                <div style={{ fontSize: '14px', lineHeight: '1.5', color: 'var(--pf-v6-global--Color--200)', marginBottom: '12px' }}>
+                  See the full list of open and closed cases, updates, and attachments in the Customer Portal.
+                </div>
+                <Button
+                  variant="secondary"
+                  icon={<ExternalLinkAltIcon />}
+                  iconPosition="end"
+                  component="a"
+                  href={RH_SUPPORT_CASES_LIST}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  View all cases in Customer Portal
+                </Button>
+              </CardBody>
+            </Card>
+          </div>
         </div>
       </Tab>
       <Tab 
@@ -3734,7 +3621,7 @@ const AppLayout: React.FunctionComponent<IAppLayout> = ({ children }) => {
                 }
               `}</style>
               <div style={{ fontSize: '14px', lineHeight: '1.5', color: 'var(--pf-v6-global--Color--200)', marginBottom: '24px' }}>
-                Help us improve the Red Hat Hybrid Cloud Console by sharing your experience. For urgent issues, <a href="https://access.redhat.com/support/cases/#/case/new/get-support?" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--pf-v6-global--link--Color, #0066cc)', textDecoration: 'none' }} onMouseEnter={(e) => e.currentTarget.style.textDecoration = 'underline'} onMouseLeave={(e) => e.currentTarget.style.textDecoration = 'none'}>open a support case</a>.
+                Help us improve the Red Hat Hybrid Cloud Console by sharing your experience. For urgent issues, <a href={RH_SUPPORT_NEW_CASE} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--pf-v6-global--link--Color, #0066cc)', textDecoration: 'none' }} onMouseEnter={(e) => e.currentTarget.style.textDecoration = 'underline'} onMouseLeave={(e) => e.currentTarget.style.textDecoration = 'none'}>open a support case</a>.
               </div>
               
               <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', maxWidth: '800px' }}>
@@ -3820,6 +3707,275 @@ const AppLayout: React.FunctionComponent<IAppLayout> = ({ children }) => {
           );
         })()}
       </Tab>
+      <Tab 
+        eventKey={6} 
+        title={
+          <img src={SparkleIcon} alt="Chat" style={{ width: '14px', height: '14px' }} />
+        }
+        aria-label="Chat sub tab"
+      >
+        <div style={{ height: '100%', display: 'flex', flexDirection: 'column', minHeight: '0' }}>
+          <div style={{ 
+            padding: '16px', 
+            borderBottom: '1px solid #d2d2d2', 
+            backgroundColor: 'white',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '8px',
+            flexShrink: 0
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <Button
+                variant="plain"
+                style={{
+                  padding: '4px',
+                  color: '#666'
+                }}
+                aria-label="Chat options menu"
+              >
+                <BarsIcon style={{ width: '16px', height: '16px' }} />
+              </Button>
+              <div style={{
+                width: '32px',
+                height: '32px',
+                borderRadius: '50%',
+                background: 'linear-gradient(135deg, #F56E6E 0%, #5E40BE 100%)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center'
+              }}>
+                <CommentsIcon style={{ width: '16px', height: '16px', color: 'white' }} />
+              </div>
+              <div style={{ fontSize: '16px', fontWeight: 'bold', color: '#151515' }}>
+                Ask Red Hat
+              </div>
+            </div>
+            
+            <div style={{ width: '100%' }}>
+              <Dropdown
+                isOpen={false}
+                onSelect={() => {}}
+                toggle={(toggleRef: React.Ref<any>) => (
+                  <MenuToggle
+                    ref={toggleRef}
+                    isExpanded={false}
+                    style={{
+                      width: '100%',
+                      padding: '8px 12px',
+                      fontSize: '14px',
+                      fontWeight: 'bold',
+                      color: '#151515',
+                      textAlign: 'left',
+                      justifyContent: 'flex-start',
+                      backgroundColor: 'transparent',
+                      border: '1px solid #d2d2d2',
+                      borderRadius: '4px'
+                    }}
+                  >
+                    Agent: General Red Hat
+                  </MenuToggle>
+                )}
+                shouldFocusToggleOnSelect
+              >
+                <DropdownList>
+                  <DropdownItem>Agent: General Red Hat</DropdownItem>
+                  <DropdownItem>Support Agent</DropdownItem>
+                  <DropdownItem>Feedback Bot</DropdownItem>
+                </DropdownList>
+              </Dropdown>
+            </div>
+          </div>
+
+          <div style={{ 
+            flex: 1, 
+            padding: '16px', 
+            overflowY: 'auto',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '12px',
+            minHeight: '0'
+          }}>
+            <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
+              <div style={{
+                width: '24px',
+                height: '24px',
+                borderRadius: '50%',
+                background: 'linear-gradient(135deg, #F56E6E 0%, #5E40BE 100%)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexShrink: 0
+              }}>
+                <CommentsIcon style={{ width: '12px', height: '12px', color: 'white' }} />
+              </div>
+              <div style={{
+                backgroundColor: '#f0f0f0',
+                padding: '12px 16px',
+                borderRadius: '18px 18px 18px 4px',
+                maxWidth: '70%',
+                fontSize: '14px',
+                lineHeight: '1.4'
+              }}>
+                Hi! I'm here to help with your questions and feedback. How can I assist you today?
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-start', justifyContent: 'flex-end' }}>
+              <div style={{
+                backgroundColor: 'linear-gradient(135deg, #F56E6E 0%, #5E40BE 100%)',
+                padding: '12px 16px',
+                borderRadius: '18px 18px 4px 18px',
+                maxWidth: '70%',
+                fontSize: '14px',
+                lineHeight: '1.4',
+                color: 'white',
+                background: 'linear-gradient(135deg, #F56E6E 0%, #5E40BE 100%)'
+              }}>
+                I have a question about the new features
+              </div>
+              <div style={{
+                width: '24px',
+                height: '24px',
+                borderRadius: '50%',
+                backgroundColor: '#d2d2d2',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexShrink: 0
+              }}>
+                <UserIcon style={{ width: '12px', height: '12px', color: '#666' }} />
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
+              <div style={{
+                width: '24px',
+                height: '24px',
+                borderRadius: '50%',
+                background: 'linear-gradient(135deg, #F56E6E 0%, #5E40BE 100%)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexShrink: 0
+              }}>
+                <CommentsIcon style={{ width: '12px', height: '12px', color: 'white' }} />
+              </div>
+              <div style={{
+                backgroundColor: '#f0f0f0',
+                padding: '12px 16px',
+                borderRadius: '18px 18px 18px 4px',
+                maxWidth: '70%',
+                fontSize: '14px',
+                lineHeight: '1.4'
+              }}>
+                I'd be happy to help! What specific features would you like to know more about? I can provide information about:
+                <br />• New dashboard capabilities
+                <br />• Updated user interface
+                <br />• Enhanced security features
+                <br />• Performance improvements
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
+              <div style={{
+                width: '24px',
+                height: '24px',
+                borderRadius: '50%',
+                background: 'linear-gradient(135deg, #F56E6E 0%, #5E40BE 100%)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexShrink: 0
+              }}>
+                <CommentsIcon style={{ width: '12px', height: '12px', color: 'white' }} />
+              </div>
+              <div style={{
+                backgroundColor: '#f0f0f0',
+                padding: '12px 16px',
+                borderRadius: '18px 18px 18px 4px',
+                fontSize: '14px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '4px'
+              }}>
+                <div style={{ 
+                  width: '6px', 
+                  height: '6px', 
+                  borderRadius: '50%', 
+                  backgroundColor: '#999',
+                  animation: 'typing 1.4s infinite ease-in-out'
+                }}></div>
+                <div style={{ 
+                  width: '6px', 
+                  height: '6px', 
+                  borderRadius: '50%', 
+                  backgroundColor: '#999',
+                  animation: 'typing 1.4s infinite ease-in-out 0.2s'
+                }}></div>
+                <div style={{ 
+                  width: '6px', 
+                  height: '6px', 
+                  borderRadius: '50%', 
+                  backgroundColor: '#999',
+                  animation: 'typing 1.4s infinite ease-in-out 0.4s'
+                }}></div>
+              </div>
+            </div>
+          </div>
+
+          <div style={{ 
+            padding: '16px', 
+            borderTop: '1px solid #d2d2d2',
+            backgroundColor: 'white',
+            flexShrink: 0
+          }}>
+            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+              <input
+                type="text"
+                placeholder="Type your message..."
+                style={{
+                  flex: 1,
+                  padding: '12px 16px',
+                  border: '1px solid #d2d2d2',
+                  borderRadius: '24px',
+                  fontSize: '14px',
+                  outline: 'none',
+                  backgroundColor: 'white'
+                }}
+                disabled
+              />
+              <Button
+                variant="primary"
+                style={{
+                  width: '40px',
+                  height: '40px',
+                  borderRadius: '50%',
+                  background: 'linear-gradient(135deg, #F56E6E 0%, #5E40BE 100%)',
+                  border: 'none'
+                }}
+                disabled
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="white">
+                  <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
+                </svg>
+              </Button>
+            </div>
+          </div>
+
+          <style>{`
+            @keyframes typing {
+              0%, 60%, 100% {
+                transform: translateY(0);
+                opacity: 0.4;
+              }
+              30% {
+                transform: translateY(-10px);
+                opacity: 1;
+              }
+            }
+          `}</style>
+        </div>
+      </Tab>
     </Tabs>
     );
   };
@@ -3903,282 +4059,6 @@ const AppLayout: React.FunctionComponent<IAppLayout> = ({ children }) => {
         );
       
       case 'custom':
-        if (tab.id === 'comments') {
-          return (
-            <div style={{ height: '100%', display: 'flex', flexDirection: 'column', minHeight: '0' }}>
-              {/* Chat Header */}
-              <div style={{ 
-                padding: '16px', 
-                borderBottom: '1px solid #d2d2d2', 
-                backgroundColor: 'white',
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '8px',
-                flexShrink: 0
-              }}>
-                {/* First row: Hamburger, Icon, Title */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                  <Button
-                    variant="plain"
-                    style={{
-                      padding: '4px',
-                      color: '#666'
-                    }}
-                    aria-label="Chat options menu"
-                  >
-                    <BarsIcon style={{ width: '16px', height: '16px' }} />
-                  </Button>
-                  <div style={{
-                    width: '32px',
-                    height: '32px',
-                    borderRadius: '50%',
-                    background: 'linear-gradient(135deg, #F56E6E 0%, #5E40BE 100%)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center'
-                  }}>
-                    <CommentsIcon style={{ width: '16px', height: '16px', color: 'white' }} />
-                  </div>
-                  <div style={{ fontSize: '16px', fontWeight: 'bold', color: '#151515' }}>
-                    Ask Red Hat
-                  </div>
-                </div>
-                
-                {/* Second row: Full width dropdown */}
-                <div style={{ width: '100%' }}>
-                  <Dropdown
-                    isOpen={false}
-                    onSelect={() => {}}
-                    toggle={(toggleRef: React.Ref<any>) => (
-                      <MenuToggle
-                        ref={toggleRef}
-                        isExpanded={false}
-                        style={{
-                          width: '100%',
-                          padding: '8px 12px',
-                          fontSize: '14px',
-                          fontWeight: 'bold',
-                          color: '#151515',
-                          textAlign: 'left',
-                          justifyContent: 'flex-start',
-                          backgroundColor: 'transparent',
-                          border: '1px solid #d2d2d2',
-                          borderRadius: '4px'
-                        }}
-                      >
-                        Agent: General Red Hat
-                      </MenuToggle>
-                    )}
-                    shouldFocusToggleOnSelect
-                  >
-                    <DropdownList>
-                      <DropdownItem>Agent: General Red Hat</DropdownItem>
-                      <DropdownItem>Support Agent</DropdownItem>
-                      <DropdownItem>Feedback Bot</DropdownItem>
-                    </DropdownList>
-                  </Dropdown>
-                </div>
-              </div>
-
-              {/* Chat Messages */}
-              <div style={{ 
-                flex: 1, 
-                padding: '16px', 
-                overflowY: 'auto',
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '12px',
-                minHeight: '0'
-              }}>
-                {/* Bot Message */}
-                <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
-                  <div style={{
-                    width: '24px',
-                    height: '24px',
-                    borderRadius: '50%',
-                    background: 'linear-gradient(135deg, #F56E6E 0%, #5E40BE 100%)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    flexShrink: 0
-                  }}>
-                    <CommentsIcon style={{ width: '12px', height: '12px', color: 'white' }} />
-                  </div>
-                  <div style={{
-                    backgroundColor: '#f0f0f0',
-                    padding: '12px 16px',
-                    borderRadius: '18px 18px 18px 4px',
-                    maxWidth: '70%',
-                    fontSize: '14px',
-                    lineHeight: '1.4'
-                  }}>
-                    Hi! I'm here to help with your questions and feedback. How can I assist you today?
-                  </div>
-                </div>
-
-                {/* User Message */}
-                <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-start', justifyContent: 'flex-end' }}>
-                  <div style={{
-                    backgroundColor: 'linear-gradient(135deg, #F56E6E 0%, #5E40BE 100%)',
-                    padding: '12px 16px',
-                    borderRadius: '18px 18px 4px 18px',
-                    maxWidth: '70%',
-                    fontSize: '14px',
-                    lineHeight: '1.4',
-                    color: 'white',
-                    background: 'linear-gradient(135deg, #F56E6E 0%, #5E40BE 100%)'
-                  }}>
-                    I have a question about the new features
-                  </div>
-                  <div style={{
-                    width: '24px',
-                    height: '24px',
-                    borderRadius: '50%',
-                    backgroundColor: '#d2d2d2',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    flexShrink: 0
-                  }}>
-                    <UserIcon style={{ width: '12px', height: '12px', color: '#666' }} />
-                  </div>
-                </div>
-
-                {/* Bot Message */}
-                <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
-                  <div style={{
-                    width: '24px',
-                    height: '24px',
-                    borderRadius: '50%',
-                    background: 'linear-gradient(135deg, #F56E6E 0%, #5E40BE 100%)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    flexShrink: 0
-                  }}>
-                    <CommentsIcon style={{ width: '12px', height: '12px', color: 'white' }} />
-                  </div>
-                  <div style={{
-                    backgroundColor: '#f0f0f0',
-                    padding: '12px 16px',
-                    borderRadius: '18px 18px 18px 4px',
-                    maxWidth: '70%',
-                    fontSize: '14px',
-                    lineHeight: '1.4'
-                  }}>
-                    I'd be happy to help! What specific features would you like to know more about? I can provide information about:
-                    <br />• New dashboard capabilities
-                    <br />• Updated user interface
-                    <br />• Enhanced security features
-                    <br />• Performance improvements
-                  </div>
-                </div>
-
-                {/* Typing Indicator */}
-                <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
-                  <div style={{
-                    width: '24px',
-                    height: '24px',
-                    borderRadius: '50%',
-                    background: 'linear-gradient(135deg, #F56E6E 0%, #5E40BE 100%)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    flexShrink: 0
-                  }}>
-                    <CommentsIcon style={{ width: '12px', height: '12px', color: 'white' }} />
-                  </div>
-                  <div style={{
-                    backgroundColor: '#f0f0f0',
-                    padding: '12px 16px',
-                    borderRadius: '18px 18px 18px 4px',
-                    fontSize: '14px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '4px'
-                  }}>
-                    <div style={{ 
-                      width: '6px', 
-                      height: '6px', 
-                      borderRadius: '50%', 
-                      backgroundColor: '#999',
-                      animation: 'typing 1.4s infinite ease-in-out'
-                    }}></div>
-                    <div style={{ 
-                      width: '6px', 
-                      height: '6px', 
-                      borderRadius: '50%', 
-                      backgroundColor: '#999',
-                      animation: 'typing 1.4s infinite ease-in-out 0.2s'
-                    }}></div>
-                    <div style={{ 
-                      width: '6px', 
-                      height: '6px', 
-                      borderRadius: '50%', 
-                      backgroundColor: '#999',
-                      animation: 'typing 1.4s infinite ease-in-out 0.4s'
-                    }}></div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Chat Input - Pinned to Bottom */}
-              <div style={{ 
-                padding: '16px', 
-                borderTop: '1px solid #d2d2d2',
-                backgroundColor: 'white',
-                flexShrink: 0
-              }}>
-                <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                  <input
-                    type="text"
-                    placeholder="Type your message..."
-                    style={{
-                      flex: 1,
-                      padding: '12px 16px',
-                      border: '1px solid #d2d2d2',
-                      borderRadius: '24px',
-                      fontSize: '14px',
-                      outline: 'none',
-                      backgroundColor: 'white'
-                    }}
-                    disabled
-                  />
-                  <Button
-                    variant="primary"
-                    style={{
-                      width: '40px',
-                      height: '40px',
-                      borderRadius: '50%',
-                      background: 'linear-gradient(135deg, #F56E6E 0%, #5E40BE 100%)',
-                      border: 'none'
-                    }}
-                    disabled
-                  >
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="white">
-                      <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
-                    </svg>
-                  </Button>
-                </div>
-              </div>
-
-              {/* Typing Animation CSS */}
-              <style>{`
-                @keyframes typing {
-                  0%, 60%, 100% {
-                    transform: translateY(0);
-                    opacity: 0.4;
-                  }
-                  30% {
-                    transform: translateY(-10px);
-                    opacity: 1;
-                  }
-                }
-              `}</style>
-            </div>
-          );
-        }
-        
         // Check if this is the Alert manager tab
         if (tab.title === 'Alert manager') {
           return (
@@ -4740,37 +4620,49 @@ const AppLayout: React.FunctionComponent<IAppLayout> = ({ children }) => {
     </SkipToContent>
   );
 
-  const drawerContent = (
-    <DrawerPanelContent 
-      ref={helpPanelRef}
-      defaultSize="580px"
-      minSize="320px"
-      maxSize="800px"
-      isResizable
-    >
-      <DrawerHead>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', width: '100%' }}>
+  const renderHelpPanelHead = (onCloseHelp: () => void) => (
+    <DrawerHead>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '12px', width: '100%' }}>
         <Title headingLevel="h2" size="lg">
-            Help
+          Help
         </Title>
+        <Button
+          variant="link"
+          isInline
+          component="a"
+          href="https://status.redhat.com"
+          target="_blank"
+          rel="noopener noreferrer"
+          style={{ fontSize: '14px' }}
+        >
+          Red Hat status page
+          <ExternalLinkAltIcon style={{ marginLeft: '4px' }} />
+        </Button>
+      </div>
+      <DrawerActions>
+        <Tooltip content="Open help in a new browser tab">
           <Button
-            variant="link"
-            isInline
-            component="a"
-            href="https://status.redhat.com"
-            target="_blank"
-            rel="noopener noreferrer"
-            style={{ fontSize: '14px' }}
-          >
-            Red Hat status page
-            <ExternalLinkAltIcon style={{ marginLeft: '4px' }} />
-          </Button>
-        </div>
-        <DrawerActions>
-          <DrawerCloseButton onClick={onDrawerClose} />
-        </DrawerActions>
-      </DrawerHead>
-      <DrawerContentBody style={{ padding: 0 }}>
+            variant="plain"
+            onClick={openHelpInNewTab}
+            aria-label="Open help in a new browser tab"
+            icon={<ExternalLinkAltIcon />}
+          />
+        </Tooltip>
+        <Tooltip content="Open help in a separate window">
+          <Button
+            variant="plain"
+            onClick={openHelpUndocked}
+            aria-label="Open help in a separate window"
+            icon={<OutlinedWindowRestoreIcon />}
+          />
+        </Tooltip>
+        <DrawerCloseButton onClick={onCloseHelp} />
+      </DrawerActions>
+    </DrawerHead>
+  );
+
+  const helpPanelTabsSection = (
+    <>
         <style>{`
           /* Force hidden drawer panels to not take up space */
           .pf-v6-c-drawer__panel[hidden] {
@@ -4803,6 +4695,14 @@ const AppLayout: React.FunctionComponent<IAppLayout> = ({ children }) => {
             width: 100% !important;
             max-width: 100% !important;
             overflow: visible !important; /* Allow dropdown menu to show */
+          }
+
+          /* 1px vertical separators between help panel tab items */
+          .pf-v6-c-drawer__panel .hcp-help-panel-tabs .pf-v6-c-tabs__list {
+            gap: 0;
+          }
+          .pf-v6-c-drawer__panel .hcp-help-panel-tabs .pf-v6-c-tabs__list > .pf-v6-c-tabs__item + .pf-v6-c-tabs__item {
+            box-shadow: inset 1px 0 0 var(--pf-v6-global--BorderColor--100);
           }
           
           /* Constrain the scrollable tab list area */
@@ -4887,19 +4787,6 @@ const AppLayout: React.FunctionComponent<IAppLayout> = ({ children }) => {
             width: 300px !important;
           }
           
-          /* Make only the comments tab content fill full height */
-          .pf-v6-c-tabs__panel:has([data-tab-id="comments"]) {
-            height: 100% !important;
-            display: flex !important;
-            flex-direction: column !important;
-          }
-          
-          /* Target the comments tab content specifically */
-          [data-tab-id="comments"] {
-            height: 100% !important;
-            display: flex !important;
-            flex-direction: column !important;
-          }
           
           /* Style the overflow button to look like a persistent tab */
           .pf-v6-c-tabs__scroll-button[data-overflowing] {
@@ -4973,76 +4860,22 @@ const AppLayout: React.FunctionComponent<IAppLayout> = ({ children }) => {
             background-color: var(--pf-v6-global--BackgroundColor--200, #f5f5f5) !important;
           }
         `}</style>
-        <Tabs 
-          isBox
-          isOverflowHorizontal
-          activeKey={activeTabKey}
-          onSelect={handleTabClick}
-          onAdd={handleAddTab}
-          aria-label="Dashboard tabs"
-        >
-          {tabs.map((tab, index) => {
-            // Count non-comment icon tabs (text-based tabs)
-            const textBasedTabs = tabs.filter(t => t.id !== 'comments');
-            const canCloseGetStarted = textBasedTabs.length > 1;
-            
-            // Determine if this tab should be closable
-            const isClosable = tab.id === 'comments' 
-              ? false  // Comment icon tab is never closable
-              : (tab.id === 'get-started' 
-                  ? canCloseGetStarted  // Get started tab is closable only when there are multiple text-based tabs
-                  : true);  // Other text-based tabs are always closable
-            
-            // Only show 'X' on the currently active tab
-            const showCloseButton = isClosable && tab.id === activeTabKey;
-            
-            // Check if this tab needs a tooltip (title > 20 chars)
-            const needsTooltip = tab.id !== 'comments' && tab.title.length > 20;
-            
-            return (
-            <Tab 
-              key={tab.id}
-              eventKey={tab.id} 
-                title={
-                  tab.id === 'comments' ? (
-                    <div style={{ paddingLeft: '4px', paddingRight: '4px' }}>
-                      <img 
-                        src={CommentIcon} 
-                        alt="" 
-                        aria-label="Comments"
-                        style={{ width: '16px', height: '16px' }} 
-                      />
-                    </div>
-                  ) : (
-                    <div data-tab-tooltip-trigger={needsTooltip ? tab.id : undefined}>
-                      <TabTitleText>{tab.title}</TabTitleText>
-                    </div>
-                  )
-                }
-                aria-label={tab.id === 'comments' ? 'Comments tab' : `${tab.title} tab`}
-              actions={
-                  showCloseButton ? (
-                  <TabAction
-                    aria-label={`Close ${tab.title}`}
-                    onClick={(event) => handleCloseTab(event, index)}
-                  >
-                    <TimesIcon />
-                  </TabAction>
-                ) : null
-              }
-            >
-                <div data-tab-id={tab.id} style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-              {renderTabContent(tab, index)}
-                </div>
-            </Tab>
-            );
-          })}
-        </Tabs>
-      </DrawerContentBody>
-    </DrawerPanelContent>
+        {renderSubTabs(0, tabs[0], "Help panel tabs")}
+    </>
   );
 
-
+  const drawerContent = (
+    <DrawerPanelContent
+      ref={helpPanelRef}
+      defaultSize="580px"
+      minSize="320px"
+      maxSize="800px"
+      isResizable
+    >
+      {renderHelpPanelHead(onDrawerClose)}
+      <DrawerContentBody style={{ padding: 0 }}>{helpPanelTabsSection}</DrawerContentBody>
+    </DrawerPanelContent>
+  );
 
   // Create notification drawer content
   const notificationDrawerContent = (
@@ -5138,6 +4971,61 @@ const AppLayout: React.FunctionComponent<IAppLayout> = ({ children }) => {
       </DrawerContentBody>
     </DrawerPanelContent>
   );
+
+  if (helpStandalone) {
+    return (
+      <>
+        <div
+          className="hcp-help-standalone pf-v6-c-drawer__panel"
+          style={{
+            height: '100vh',
+            display: 'flex',
+            flexDirection: 'column',
+            overflow: 'hidden',
+            backgroundColor: 'var(--pf-v6-global--BackgroundColor--100)',
+          }}
+        >
+          <HelpPanelContext.Provider value={{ openHelpPanelWithTab }}>
+            {renderHelpPanelHead(onStandaloneClose)}
+            <div
+              className="pf-v6-c-drawer__panel-content"
+              style={{
+                flex: 1,
+                minHeight: 0,
+                display: 'flex',
+                flexDirection: 'column',
+                overflow: 'hidden',
+              }}
+            >
+              <DrawerContentBody
+                style={{
+                  padding: 0,
+                  flex: 1,
+                  minHeight: 0,
+                  overflow: 'hidden',
+                  display: 'flex',
+                  flexDirection: 'column',
+                }}
+              >
+                {helpPanelTabsSection}
+              </DrawerContentBody>
+            </div>
+          </HelpPanelContext.Provider>
+        </div>
+        {tabTooltips.map((tooltip) => (
+          <Tooltip
+            key={`tab-${tooltip.tabId}`}
+            content={tooltip.text}
+            triggerRef={() => document.querySelector(`[data-tab-tooltip-trigger="${tooltip.tabId}"]`) as HTMLElement}
+            entryDelay={100}
+            exitDelay={0}
+            animationDuration={100}
+            position="bottom"
+          />
+        ))}
+      </>
+    );
+  }
 
   return (
     <>
@@ -6666,6 +6554,7 @@ const AppLayout: React.FunctionComponent<IAppLayout> = ({ children }) => {
       )}
       
       {/* Floating Comments Button */}
+      {!helpStandalone && (
       <div
         style={{
           position: 'fixed',
@@ -6680,9 +6569,20 @@ const AppLayout: React.FunctionComponent<IAppLayout> = ({ children }) => {
         <Button
           variant="plain"
           onClick={() => {
-            // Open the help panel and switch to comments tab
             setIsDrawerExpanded(true);
-            setActiveTabKey(0); // Switch to comments tab (index 0)
+            setActiveTabKey('get-started');
+            // Switch to the Chat sub-tab (index 6)
+            setTabs(prevTabs => {
+              const newTabs = [...prevTabs];
+              const getStartedIdx = newTabs.findIndex(t => t.id === 'get-started');
+              if (getStartedIdx !== -1) {
+                newTabs[getStartedIdx].activeSubTab = 6;
+                newTabs[getStartedIdx].title = 'Chat';
+                newTabs[getStartedIdx].originalTitle = 'Chat';
+                newTabs[getStartedIdx].hasUserInteracted = true;
+              }
+              return newTabs;
+            });
           }}
           style={{
             width: '56px',
@@ -6705,7 +6605,7 @@ const AppLayout: React.FunctionComponent<IAppLayout> = ({ children }) => {
             e.currentTarget.style.transform = 'scale(1)';
             e.currentTarget.style.boxShadow = '0 4px 12px rgba(0, 0, 0, 0.15)';
           }}
-          aria-label="Open comments and feedback"
+          aria-label="Open chat"
         >
           <CommentsIcon 
             style={{ 
@@ -6716,6 +6616,7 @@ const AppLayout: React.FunctionComponent<IAppLayout> = ({ children }) => {
           />
         </Button>
       </div>
+      )}
 
       {/* PatternFly Tooltips for truncated overflow menu items */}
       {overflowTooltips.map((tooltip, index) => (
