@@ -1973,6 +1973,10 @@ const AppLayout: React.FunctionComponent<IAppLayout> = ({ children, helpStandalo
   };
 
   const onDrawerToggle = () => {
+    if (helpInNewTab) {
+      setActiveChromeTab('help');
+      return;
+    }
     const newDrawerState = !isDrawerExpanded;
     setIsDrawerExpanded(newDrawerState);
     
