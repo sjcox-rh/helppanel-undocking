@@ -89,6 +89,7 @@ import {
 } from '@patternfly/react-core';
 import { Table, Thead, Tbody, Tr, Th, Td } from '@patternfly/react-table';
 import {
+  ArrowRightIcon,
   BarsIcon, 
   BellIcon, 
   BookmarkIcon,
@@ -141,6 +142,178 @@ interface TabContent {
   hasUserInteracted?: boolean;
   searchQuery?: string;
 }
+
+interface ChromeTab {
+  title: string;
+  active: boolean;
+  onSelect?: () => void;
+  onClose?: () => void;
+}
+
+const ChromeBrowserFrame: React.FC<{
+  children: React.ReactNode;
+  title?: string;
+  url?: string;
+  tabs?: ChromeTab[];
+}> = ({
+  children,
+  title = 'Red Hat Hybrid Cloud Console',
+  url = 'console.redhat.com',
+  tabs,
+}) => {
+  const chromeTabs = tabs || [{ title, active: true }];
+
+  return (
+  <div style={{
+    display: 'flex',
+    flexDirection: 'column',
+    height: '100vh',
+    width: '100%',
+    border: '1px solid #dadce0',
+    borderRadius: '8px',
+    overflow: 'hidden',
+    boxShadow: '0 1px 4px rgba(0,0,0,0.12)',
+    backgroundColor: '#202124',
+  }}>
+    {/* Title bar with traffic lights */}
+    <div style={{
+      display: 'flex',
+      alignItems: 'center',
+      height: '38px',
+      backgroundColor: '#202124',
+      padding: '0 12px',
+      flexShrink: 0,
+    }}>
+      <div style={{ display: 'flex', gap: '8px', marginRight: '16px' }}>
+        <div style={{ width: '12px', height: '12px', borderRadius: '50%', backgroundColor: '#ff5f57' }} />
+        <div style={{ width: '12px', height: '12px', borderRadius: '50%', backgroundColor: '#ffbd2e' }} />
+        <div style={{ width: '12px', height: '12px', borderRadius: '50%', backgroundColor: '#28c840' }} />
+      </div>
+
+      {/* Chrome tabs */}
+      {chromeTabs.map((tab, idx) => (
+        <div
+          key={idx}
+          onClick={tab.onSelect}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            height: '28px',
+            backgroundColor: tab.active ? '#35363a' : '#292b2e',
+            borderRadius: '8px 8px 0 0',
+            padding: '0 12px',
+            marginTop: '10px',
+            gap: '8px',
+            maxWidth: '240px',
+            cursor: 'pointer',
+            opacity: tab.active ? 1 : 0.7,
+          }}
+        >
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" style={{ flexShrink: 0 }}>
+            <circle cx="8" cy="8" r="7" fill="#ee0000" />
+            <path d="M5 5.5h6v1.2H8.5V11h-1V6.7H5V5.5z" fill="white" />
+          </svg>
+          <span style={{
+            color: '#e8eaed',
+            fontSize: '12px',
+            whiteSpace: 'nowrap',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+          }}>
+            {tab.title}
+          </span>
+          {tab.onClose && (
+            <svg
+              width="14" height="14" viewBox="0 0 14 14" fill="none"
+              style={{ flexShrink: 0, cursor: 'pointer' }}
+              onClick={(e) => { e.stopPropagation(); tab.onClose?.(); }}
+            >
+              <path d="M4 4l6 6M10 4l-6 6" stroke="#9aa0a6" strokeWidth="1.2" />
+            </svg>
+          )}
+        </div>
+      ))}
+
+      {/* New tab button */}
+      <div style={{
+        width: '24px',
+        height: '24px',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginTop: '6px',
+        marginLeft: '4px',
+        cursor: 'pointer',
+      }}>
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+          <path d="M7 2v10M2 7h10" stroke="#9aa0a6" strokeWidth="1.5" />
+        </svg>
+      </div>
+    </div>
+
+    {/* Address bar */}
+    <div style={{
+      display: 'flex',
+      alignItems: 'center',
+      height: '36px',
+      backgroundColor: '#35363a',
+      padding: '0 8px',
+      gap: '4px',
+      flexShrink: 0,
+    }}>
+      {/* Nav buttons */}
+      <svg width="20" height="20" viewBox="0 0 20 20" fill="none" style={{ cursor: 'pointer', flexShrink: 0 }}>
+        <path d="M12 5l-5 5 5 5" stroke="#9aa0a6" strokeWidth="1.5" fill="none" />
+      </svg>
+      <svg width="20" height="20" viewBox="0 0 20 20" fill="none" style={{ cursor: 'pointer', flexShrink: 0, opacity: 0.4 }}>
+        <path d="M8 5l5 5-5 5" stroke="#9aa0a6" strokeWidth="1.5" fill="none" />
+      </svg>
+      <svg width="20" height="20" viewBox="0 0 20 20" fill="none" style={{ cursor: 'pointer', flexShrink: 0 }}>
+        <path d="M10 4v8M6 8l4 4 4-4" stroke="#9aa0a6" strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+
+      {/* URL bar */}
+      <div style={{
+        flex: 1,
+        height: '26px',
+        backgroundColor: '#202124',
+        borderRadius: '13px',
+        display: 'flex',
+        alignItems: 'center',
+        padding: '0 12px',
+        gap: '6px',
+      }}>
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" style={{ flexShrink: 0 }}>
+          <path d="M7 1.5a3.5 3.5 0 00-3.5 3.5v1.5h-.5a1 1 0 00-1 1v4a1 1 0 001 1h8a1 1 0 001-1v-4a1 1 0 00-1-1h-.5V5A3.5 3.5 0 007 1.5zm-2 5V5a2 2 0 114 0v1.5H5z" fill="#9aa0a6" />
+        </svg>
+        <span style={{
+          color: '#e8eaed',
+          fontSize: '13px',
+          fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+        }}>
+          {url}
+        </span>
+      </div>
+
+      {/* Profile / menu icons */}
+      <svg width="20" height="20" viewBox="0 0 20 20" fill="none" style={{ cursor: 'pointer', flexShrink: 0 }}>
+        <path d="M10 3a3 3 0 110 6 3 3 0 010-6zm-5 12c0-2.76 2.24-5 5-5s5 2.24 5 5" stroke="#9aa0a6" strokeWidth="1.3" fill="none" />
+      </svg>
+      <svg width="20" height="20" viewBox="0 0 20 20" fill="none" style={{ cursor: 'pointer', flexShrink: 0 }}>
+        <circle cx="10" cy="5" r="1.5" fill="#9aa0a6" />
+        <circle cx="10" cy="10" r="1.5" fill="#9aa0a6" />
+        <circle cx="10" cy="15" r="1.5" fill="#9aa0a6" />
+      </svg>
+    </div>
+
+    {/* Page content */}
+    <div style={{ flex: 1, overflow: 'hidden', backgroundColor: '#fff' }}>
+      {children}
+    </div>
+  </div>
+  );
+};
 
 /** Initial help drawer tabs: Find help. */
 function createDefaultHelpPanelTabs(): TabContent[] {
@@ -1453,9 +1626,13 @@ const AppLayout: React.FunctionComponent<IAppLayout> = ({ children, helpStandalo
     () => `${window.location.origin}${helpStandaloneHref}`,
     [helpStandaloneHref]
   );
+  const [helpInNewTab, setHelpInNewTab] = React.useState(false);
+  const [activeChromeTab, setActiveChromeTab] = React.useState<'console' | 'help'>('console');
   const openHelpInNewTab = React.useCallback(() => {
-    window.open(getHelpAbsoluteUrl(), '_blank', 'noopener,noreferrer');
-  }, [getHelpAbsoluteUrl]);
+    setHelpInNewTab(true);
+    setActiveChromeTab('help');
+    setIsDrawerExpanded(false);
+  }, []);
   const HELP_UNDOCK_WINDOW_NAME = 'hccHelpPanel';
   const openHelpUndocked = React.useCallback(() => {
     const w = 720;
@@ -4974,11 +5151,11 @@ const AppLayout: React.FunctionComponent<IAppLayout> = ({ children, helpStandalo
 
   if (helpStandalone) {
     return (
-      <>
+      <ChromeBrowserFrame title="Help | Red Hat Hybrid Cloud Console" url="console.redhat.com/help">
         <div
           className="hcp-help-standalone pf-v6-c-drawer__panel"
           style={{
-            height: '100vh',
+            height: '100%',
             display: 'flex',
             flexDirection: 'column',
             overflow: 'hidden',
@@ -5023,12 +5200,53 @@ const AppLayout: React.FunctionComponent<IAppLayout> = ({ children, helpStandalo
             position="bottom"
           />
         ))}
-      </>
+      </ChromeBrowserFrame>
     );
   }
 
+  const chromeTabs: ChromeTab[] = helpInNewTab
+    ? [
+        { title: 'Red Hat Hybrid Cloud Console', active: activeChromeTab === 'console', onSelect: () => setActiveChromeTab('console') },
+        { title: 'Help', active: activeChromeTab === 'help', onSelect: () => setActiveChromeTab('help'), onClose: () => { setHelpInNewTab(false); setActiveChromeTab('console'); } },
+      ]
+    : [{ title: 'Red Hat Hybrid Cloud Console', active: true }];
+
+  const chromeUrl = helpInNewTab && activeChromeTab === 'help' ? 'console.redhat.com/help' : 'console.redhat.com';
+
   return (
-    <>
+    <ChromeBrowserFrame tabs={chromeTabs} url={chromeUrl}>
+      {helpInNewTab && activeChromeTab === 'help' ? (
+        <div
+          style={{
+            height: '100%',
+            display: 'flex',
+            flexDirection: 'column',
+            overflow: 'hidden',
+            backgroundColor: 'var(--pf-v6-global--BackgroundColor--100)',
+          }}
+        >
+          <HelpPanelContext.Provider value={{ openHelpPanelWithTab }}>
+            {renderHelpPanelHead(() => { setHelpInNewTab(false); setActiveChromeTab('console'); })}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', padding: '8px 16px 0 16px' }}>
+              <Button
+                variant="secondary"
+                onClick={() => {
+                  setHelpInNewTab(false);
+                  setActiveChromeTab('console');
+                  setIsDrawerExpanded(true);
+                }}
+                icon={<ArrowRightIcon />}
+                iconPosition="end"
+              >
+                Dock to side panel
+              </Button>
+            </div>
+            <DrawerContentBody style={{ padding: 0, flex: 1, minHeight: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+              {helpPanelTabsSection}
+            </DrawerContentBody>
+          </HelpPanelContext.Provider>
+        </div>
+      ) : (
       <Page
         mainContainerId={pageId}
         masthead={masthead}
@@ -5049,6 +5267,7 @@ const AppLayout: React.FunctionComponent<IAppLayout> = ({ children, helpStandalo
           </DrawerContent>
         </Drawer>
       </Page>
+      )}
       
       {/* Full-width Services Drawer under Masthead */}
       {isLogoDropdownOpen && (
@@ -6644,7 +6863,7 @@ const AppLayout: React.FunctionComponent<IAppLayout> = ({ children, helpStandalo
         />
       ))}
 
-    </>
+    </ChromeBrowserFrame>
   );
 };
 
