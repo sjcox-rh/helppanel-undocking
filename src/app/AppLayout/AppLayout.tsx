@@ -1637,21 +1637,20 @@ const AppLayout: React.FunctionComponent<IAppLayout> = ({ children, helpStandalo
     [helpStandaloneHref]
   );
   const [helpInNewTab, setHelpInNewTab] = React.useState(false);
+  const [helpInNewWindow, setHelpInNewWindow] = React.useState(false);
   const [activeChromeTab, setActiveChromeTab] = React.useState<'console' | 'help'>('console');
   const openHelpInNewTab = React.useCallback(() => {
     setHelpInNewTab(true);
+    setHelpInNewWindow(false);
     setActiveChromeTab('help');
     setIsDrawerExpanded(false);
   }, []);
   const HELP_UNDOCK_WINDOW_NAME = 'hccHelpPanel';
   const openHelpUndocked = React.useCallback(() => {
-    const w = 720;
-    const h = Math.min(Math.round(window.screen.availHeight * 0.85), 900);
-    const left = Math.max(0, Math.round((window.screen.availWidth - w) / 2));
-    const top = Math.max(0, Math.round((window.screen.availHeight - h) / 2));
-    const features = [`width=${w}`, `height=${h}`, `left=${left}`, `top=${top}`, 'resizable=yes', 'scrollbars=yes'].join(',');
-    window.open(getHelpAbsoluteUrl(), HELP_UNDOCK_WINDOW_NAME, features);
-  }, [getHelpAbsoluteUrl]);
+    setHelpInNewWindow(true);
+    setHelpInNewTab(false);
+    setIsDrawerExpanded(false);
+  }, []);
 
   // Function to get current bundle name based on route
   const getCurrentBundle = () => {
@@ -1975,6 +1974,9 @@ const AppLayout: React.FunctionComponent<IAppLayout> = ({ children, helpStandalo
   const onDrawerToggle = () => {
     if (helpInNewTab) {
       setActiveChromeTab('help');
+      return;
+    }
+    if (helpInNewWindow) {
       return;
     }
     const newDrawerState = !isDrawerExpanded;
@@ -5263,6 +5265,61 @@ const AppLayout: React.FunctionComponent<IAppLayout> = ({ children, helpStandalo
     : [{ title: 'Red Hat Hybrid Cloud Console', active: true }];
 
   const chromeUrl = helpInNewTab && activeChromeTab === 'help' ? 'console.redhat.com/help' : 'console.redhat.com';
+
+  if (helpInNewWindow) {
+    return (
+      <div style={{ display: 'flex', gap: '8px', height: '100vh', width: '100%', padding: '8px', backgroundColor: '#1a1a2e', overflow: 'hidden' }}>
+        {/* Console window */}
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <ChromeBrowserFrame url="console.redhat.com">
+            <Page
+              mainContainerId={pageId}
+              masthead={masthead}
+              sidebar={sidebarOpen && !isPageWithoutNav && Sidebar}
+              skipToContent={PageSkipToContent}
+            >
+              <Drawer isExpanded={isNotificationDrawerOpen} isInline position="right">
+                <DrawerContent panelContent={notificationDrawerContent}>
+                  <Drawer isExpanded={false} isInline>
+                    <DrawerContent panelContent={drawerContent}>
+                      <HelpPanelContext.Provider value={{ openHelpPanelWithTab }}>
+                        {children}
+                      </HelpPanelContext.Provider>
+                    </DrawerContent>
+                  </Drawer>
+                </DrawerContent>
+              </Drawer>
+            </Page>
+          </ChromeBrowserFrame>
+        </div>
+        {/* Help window */}
+        <div style={{ width: '580px', flexShrink: 0 }}>
+          <ChromeBrowserFrame url="console.redhat.com/help">
+            <div
+              style={{
+                height: '100%',
+                display: 'flex',
+                flexDirection: 'column',
+                overflow: 'hidden',
+                backgroundColor: '#f0f0f0',
+              }}
+            >
+              <HelpPanelContext.Provider value={{ openHelpPanelWithTab }}>
+                <div style={{ padding: '24px', display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, overflow: 'hidden' }}>
+                  <div style={{ backgroundColor: '#fff', borderRadius: '8px', boxShadow: '0 1px 2px rgba(0,0,0,0.1)', display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, overflow: 'hidden' }}>
+                    {renderHelpPanelHead(() => { setHelpInNewWindow(false); }, false, () => { setHelpInNewWindow(false); setIsDrawerExpanded(true); })}
+                    <DrawerContentBody style={{ padding: 0, flex: 1, minHeight: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+                      {helpPanelTabsSection}
+                    </DrawerContentBody>
+                  </div>
+                </div>
+              </HelpPanelContext.Provider>
+            </div>
+          </ChromeBrowserFrame>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <ChromeBrowserFrame tabs={chromeTabs} url={chromeUrl}>
