@@ -4825,7 +4825,7 @@ const AppLayout: React.FunctionComponent<IAppLayout> = ({ children, helpStandalo
     </SkipToContent>
   );
 
-  const renderHelpPanelHead = (onCloseHelp: () => void, isDocked = true, onDock?: () => void) => (
+  const renderHelpPanelHead = (onCloseHelp: () => void, isDocked = true, onDock?: () => void, onGoToConsole?: () => void) => (
     <DrawerHead>
       <div style={{ display: 'flex', alignItems: 'center', gap: '12px', width: '100%', padding: isDocked ? undefined : '12px 16px' }}>
         {!isDocked && (
@@ -4851,7 +4851,7 @@ const AppLayout: React.FunctionComponent<IAppLayout> = ({ children, helpStandalo
           <ExternalLinkAltIcon style={{ marginLeft: '4px' }} />
         </Button>
         {onDock && (
-          <div style={{ marginLeft: 'auto' }}>
+          <div style={{ marginLeft: 'auto', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '8px' }}>
             <Button
               variant="secondary"
               onClick={onDock}
@@ -4860,6 +4860,15 @@ const AppLayout: React.FunctionComponent<IAppLayout> = ({ children, helpStandalo
             >
               Dock to side panel
             </Button>
+            {onGoToConsole && (
+              <Button
+                variant="link"
+                isInline
+                onClick={onGoToConsole}
+              >
+                Take me to Console dot
+              </Button>
+            )}
           </div>
         )}
       </div>
@@ -5307,7 +5316,7 @@ const AppLayout: React.FunctionComponent<IAppLayout> = ({ children, helpStandalo
               <HelpPanelContext.Provider value={{ openHelpPanelWithTab }}>
                 <div style={{ padding: '24px', display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, overflow: 'hidden' }}>
                   <div style={{ backgroundColor: '#fff', borderRadius: '8px', boxShadow: '0 1px 2px rgba(0,0,0,0.1)', display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, overflow: 'hidden' }}>
-                    {renderHelpPanelHead(() => { setHelpInNewWindow(false); }, false, () => { setHelpInNewWindow(false); setIsDrawerExpanded(true); })}
+                    {renderHelpPanelHead(() => { setHelpInNewWindow(false); }, false, () => { setHelpInNewWindow(false); setIsDrawerExpanded(true); }, () => { setHelpInNewWindow(false); })}
                     <DrawerContentBody style={{ padding: 0, flex: 1, minHeight: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
                       {helpPanelTabsSection}
                     </DrawerContentBody>
@@ -5336,7 +5345,7 @@ const AppLayout: React.FunctionComponent<IAppLayout> = ({ children, helpStandalo
           <HelpPanelContext.Provider value={{ openHelpPanelWithTab }}>
             <div style={{ padding: '24px', display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, overflow: 'hidden' }}>
               <div style={{ backgroundColor: '#fff', borderRadius: '8px', boxShadow: '0 1px 2px rgba(0,0,0,0.1)', display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, overflow: 'hidden' }}>
-                {renderHelpPanelHead(() => { setHelpInNewTab(false); setActiveChromeTab('console'); }, false, () => { setHelpInNewTab(false); setActiveChromeTab('console'); setIsDrawerExpanded(true); })}
+                {renderHelpPanelHead(() => { setHelpInNewTab(false); setActiveChromeTab('console'); }, false, () => { setHelpInNewTab(false); setActiveChromeTab('console'); setIsDrawerExpanded(true); }, () => { setActiveChromeTab('console'); })}
                 <DrawerContentBody style={{ padding: 0, flex: 1, minHeight: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
                   {helpPanelTabsSection}
                 </DrawerContentBody>
